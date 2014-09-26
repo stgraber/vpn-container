@@ -1,0 +1,22 @@
+DEPENDENCIES:
+ - socat
+ - openvpn
+ - byobu
+ - lxc
+ - A 3.13 or higher kernel with usernamespaces enabled
+
+WHY:
+ It's not uncommon to need to be connected to a bunch of overlapping
+ VPNs, network namespaces offer an easy way out of that problem.
+ Additionally user namespaces offer the ability to run a VPN entirely as
+ a user while still sharing the filesystem with the outside allowing all
+ your usual commands to work.
+
+ Also, it was a fun way to show how easy it is to work with namespaces
+ using the tools provided alongside LXC.
+
+HOW:
+ The start-vpn script creates a new user namespace where your user is
+ root, then does a few trick so openvpn and byobu can happily run.
+ openvpn is then started and a byobu server started so you can easily
+ attach inside the container.
