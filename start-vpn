@@ -84,6 +84,7 @@ while byobu -S ${VPN_NAME}.byobu list-sessions >/dev/null 2>&1; do
 done
 
 rm -f ${VPN_NAME}.byobu
+rm -Rf \$TEMPDIR
 
 kill -9 \$OPENVPN_PID 2>/dev/null
 kill -9 \$SOCAT_PID 2>/dev/null
