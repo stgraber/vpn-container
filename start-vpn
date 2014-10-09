@@ -1,9 +1,11 @@
 #!/bin/sh -e
 # Configuration
 if [ -z "$1" ] || [ -z "$2" ]; then
-    echo "Usage: $0 <VPN name> <VPN config>"
+    echo "Usage: $0 <VPN name> <VPN config> [byobu|tmux]"
     exit 1
 fi
+
+MULTIPLEXER=${3:-byobu}
 
 VPN_NAME=$1
 VPN_CONFIG=$2
@@ -21,8 +23,8 @@ which lxc-usernsexec >/dev/null \
     || (echo "Please: sudo apt-get install lxc" && exit 1)
 which openvpn >/dev/null \
     || (echo "Please: sudo apt-get install openvpn" && exit 1)
-which byobu >/dev/null \
-    || (echo "Please: sudo apt-get install byobu" && exit 1)
+which $MULTIPLEXER >/dev/null \
+    || (echo "Please: sudo apt-get install $MULTIPLEXER" && exit 1)
 
 [ ! -e "${VPN_NAME}.sock" ] || (echo "VPN is already running" && exit 1)
 
@@ -60,12 +62,12 @@ mount --bind \$TEMPDIR/group /etc/group
 cat > \$TEMPDIR/motd << EMOTD
 Welcome to ${VPN_NAME}!
 
-This shell and any other byobu tab you may open is running in a
+This shell and any other $MULTIPLEXER tab you may open is running in a
 minimal container. Even though you may appear to be root, you are not,
 uid 0 is actually mapped to your regular uid ($(id -u)).
 
 All network traffic from this container will be sent over the VPN.
-To terminate the VPN, simply close all tabs or call: byobu kill-server
+To terminate the VPN, simply close all tabs or call: $MULTIPLEXER kill-server
 
 EMOTD
 mount --bind \$TEMPDIR/motd /run/motd.dynamic
@@ -77,18 +79,18 @@ mount --bind $HOME /root
 # Configure the hostname
 hostname $VPN_NAME
 
-# Start OpenVPN in byobu
+# Start OpenVPN in $MULTIPLEXER
 cd $(dirname $VPN_CONFIG)
-byobu -S ${PWD}/${VPN_NAME}.byobu new-session -n VPN -d \
+$MULTIPLEXER -S ${PWD}/${VPN_NAME}.console new-session -n VPN -d \
     "openvpn --remote 127.0.0.1 --config $VPN_CONFIG --verb 4 ; bash"
 cd $PWD
 
 # Ready
-while byobu -S ${VPN_NAME}.byobu list-sessions >/dev/null 2>&1; do
+while $MULTIPLEXER -S ${VPN_NAME}.console list-sessions >/dev/null 2>&1; do
     sleep 2
 done
 
-rm -f ${VPN_NAME}.byobu
+rm -f ${VPN_NAME}.console
 rm -Rf \$TEMPDIR
 EOF
 ) | lxc-usernsexec -m u:0:$(id -u):1 -m g:0:$(id -g):1 -- \
@@ -97,7 +99,7 @@ NS_PID=$!
 
 # Wait for the namespace to get setup
 timeout=30
-while [ ! -e ${VPN_NAME}.byobu ] && [ "$timeout" -gt "0" ]; do
+while [ ! -e ${VPN_NAME}.console ] && [ "$timeout" -gt "0" ]; do
     sleep 1
     timeout=$(($timeout-1))
 done
@@ -105,13 +107,13 @@ done
 if [ "$timeout" = "0" ]; then
     echo "VPN failed to start" >&2
 else
-    # Attach to byobu
+    # Attach to session
     sleep 1
-    while byobu -S ${VPN_NAME}.byobu list-sessions >/dev/null 2>&1; do
-        byobu -S ${VPN_NAME}.byobu new-window -t 1 -c $HOME \
+    while $MULTIPLEXER -S ${VPN_NAME}.console list-sessions >/dev/null 2>&1; do
+        $MULTIPLEXER -S ${VPN_NAME}.console new-window -t 1 -c $HOME \
             "cat /run/motd.dynamic ; bash"
             >/dev/null 2>&1 || true
-        byobu -S ${VPN_NAME}.byobu attach -t 1
+        $MULTIPLEXER -S ${VPN_NAME}.console attach
     done
 fi
 
