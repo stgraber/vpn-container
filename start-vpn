@@ -5,15 +5,24 @@ if [ -z "$1" ] || [ -z "$2" ]; then
     exit 1
 fi
 
-MULTIPLEXER=${3:-byobu}
+MULTIPLEXER=${3:-"byobu"}
 
 VPN_NAME=$1
 VPN_CONFIG=$2
 VPN_SERVER=$(set -- $(grep ^remote $VPN_CONFIG) && echo $2)
 VPN_PORT=$(set -- $(grep ^remote $VPN_CONFIG) && echo $3)
+VPN_PROTO=$(set -- $(grep ^proto $VPN_CONFIG) && echo $2 | cut -d- -f1)
+if [ -z "$VPN_PROTO" ]; then
+    VPN_PROTO=$(set -- $(grep ^remote $VPN_CONFIG) && echo $4)
+fi
 
 if [ -z "$VPN_SERVER" ]; then
-    echo "Missing remote server in configuration."
+    echo "Missing remote server in configuration." >&2
+    exit 1
+fi
+
+if [ "$VPN_PROTO" != "tcp" ]; then
+    echo "Only tcp VPNs are supported at this time." >&2
     exit 1
 fi
 
@@ -42,7 +51,7 @@ ip addr add dev lo 127.0.0.1/32
 ip link set dev lo up
 
 # Bind the OpenVPN socket
-socat UNIX-CLIENT:${VPN_NAME}.sock TCP-LISTEN:1194 &
+socat UNIX-CLIENT:${VPN_NAME}.sock TCP-LISTEN:${VPN_PORT:-"1194"} &
 sleep 2
 
 # Configure DNS
@@ -82,7 +91,7 @@ hostname $VPN_NAME
 # Start OpenVPN in $MULTIPLEXER
 cd $(dirname $VPN_CONFIG)
 $MULTIPLEXER -S ${PWD}/${VPN_NAME}.console new-session -n VPN -d \
-    "openvpn --remote 127.0.0.1 --config $VPN_CONFIG --verb 4 ; bash"
+    "openvpn --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG; bash"
 cd $PWD
 
 # Ready
