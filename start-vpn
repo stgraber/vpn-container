@@ -32,25 +32,21 @@ sleep 2
 
 (
 cat << EOF
+# Setup proc
+mount -t proc proc /proc
+
 # Setup loopback
 ip addr add dev lo 127.0.0.1/32
 ip link set dev lo up
 
 # Bind the OpenVPN socket
 socat UNIX-CLIENT:${VPN_NAME}.sock TCP-LISTEN:1194 &
-SOCAT_PID=\$!
 sleep 2
 
 # Configure DNS
 mount -t tmpfs tmpfs /run/resolvconf/
 mkdir /run/resolvconf/interface
 touch /run/resolvconf/enable-updates
-
-# Start OpenVPN
-cd $(dirname $VPN_CONFIG)
-openvpn --remote 127.0.0.1 --config $VPN_CONFIG &
-OPENVPN_PID=\$!
-cd $PWD
 
 # Setup a temporary directory
 TEMPDIR=\$(mktemp -d)
@@ -60,38 +56,68 @@ echo "root:x:0:" > \$TEMPDIR/group
 echo "tty:x:0:" >> \$TEMPDIR/group
 mount --bind \$TEMPDIR/group /etc/group
 
+# Setup MOTD
+cat > \$TEMPDIR/motd << EMOTD
+Welcome to ${VPN_NAME}!
+
+This shell and any other byobu tab you may open is running in a
+minimal container. Even though you may appear to be root, you are not,
+uid 0 is actually mapped to your regular uid ($(id -u)).
+
+All network traffic from this container will be sent over the VPN.
+To terminate the VPN, simply close all tabs or call: byobu kill-server
+
+EMOTD
+mount --bind \$TEMPDIR/motd /run/motd.dynamic
+export MOTD=/run/motd.dynamic
+
 # Setup the home directory
 mount --bind $HOME /root
 
 # Configure the hostname
 hostname $VPN_NAME
 
-sleep 5
-
-# Start byobu
-cd $HOME
-byobu -S ${PWD}/${VPN_NAME}.byobu new-session -n - -d
+# Start OpenVPN in byobu
+cd $(dirname $VPN_CONFIG)
+byobu -S ${PWD}/${VPN_NAME}.byobu new-session -n VPN -d \
+    "openvpn --remote 127.0.0.1 --config $VPN_CONFIG --verb 4 ; bash"
 cd $PWD
 
-echo ""
-echo ""
-echo "To attach to this VPN, use: byobu -S $PWD/${VPN_NAME}.byobu"
-echo "To kill this VPN, do: byobu -S $PWD/${VPN_NAME}.byobu kill-server"
-echo "or from inside byobu: byobu kill-server"
-
+# Ready
 while byobu -S ${VPN_NAME}.byobu list-sessions >/dev/null 2>&1; do
     sleep 2
 done
 
 rm -f ${VPN_NAME}.byobu
 rm -Rf \$TEMPDIR
-
-kill -9 \$OPENVPN_PID 2>/dev/null
-kill -9 \$SOCAT_PID 2>/dev/null
 EOF
 ) | lxc-usernsexec -m u:0:$(id -u):1 -m g:0:$(id -g):1 -- \
-    lxc-unshare -s "NETWORK|MOUNT|UTSNAME" -- /bin/bash
+    lxc-unshare -s "NETWORK|MOUNT|UTSNAME|PID" -- /bin/sh &
+NS_PID=$!
 
+# Wait for the namespace to get setup
+timeout=30
+while [ ! -e ${VPN_NAME}.byobu ] && [ "$timeout" -gt "0" ]; do
+    sleep 1
+    timeout=$(($timeout-1))
+done
+
+if [ "$timeout" = "0" ]; then
+    echo "VPN failed to start" >&2
+else
+    # Attach to byobu
+    sleep 1
+    while byobu -S ${VPN_NAME}.byobu list-sessions >/dev/null 2>&1; do
+        byobu -S ${VPN_NAME}.byobu new-window -t 1 -c $HOME \
+            "cat /run/motd.dynamic ; bash"
+            >/dev/null 2>&1 || true
+        byobu -S ${VPN_NAME}.byobu attach -t 1
+    done
+fi
+
+# Wait for things to finish
+wait $NS_PID
+
+# Cleanup
 kill -9 $SOCAT_PID 2>/dev/null
-
 rm -f ${VPN_NAME}.sock
