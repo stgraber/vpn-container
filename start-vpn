@@ -53,6 +53,11 @@ which $MULTIPLEXER >/dev/null \
 
 socat ${VPN_PROTO}:${VPN_SERVER}:${VPN_PORT:-"1194"} $SOCK_HOST &
 SOCAT_PID=$!
+[ -S $SSH_AUTH_SOCK ] && {
+	socat UNIX-CLIENT:$SSH_AUTH_SOCK UNIX-LISTEN:${VPN_NAME}.sock_ssh &
+	SOCAT_PID="$SOCAT_PID $!"
+	export SSH_AUTH_SOCK=${VPN_NAME}.sock_ssh
+}
 sleep 2
 
 (
@@ -144,5 +149,5 @@ fi
 wait $NS_PID
 
 # Cleanup
-kill -9 $SOCAT_PID 2>/dev/null
-rm -f ${VPN_NAME}.sock ${VPN_NAME}.sock_in
+kill -9 $SOCAT_PID 2>/dev/null || true
+rm -f ${VPN_NAME}.sock*
