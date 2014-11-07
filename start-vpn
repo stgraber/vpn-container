@@ -15,16 +15,30 @@ VPN_PROTO=$(set -- $(grep ^proto $VPN_CONFIG) && echo $2 | cut -d- -f1)
 if [ -z "$VPN_PROTO" ]; then
     VPN_PROTO=$(set -- $(grep ^remote $VPN_CONFIG) && echo $4)
 fi
+if [ -z "$VPN_PROTO" ]; then
+    VPN_PROTO=udp
+fi
 
 if [ -z "$VPN_SERVER" ]; then
     echo "Missing remote server in configuration." >&2
     exit 1
 fi
 
-if [ "$VPN_PROTO" != "tcp" ]; then
-    echo "Only tcp VPNs are supported at this time." >&2
-    exit 1
-fi
+case "$VPN_PROTO" in
+    tcp)
+         LPORT=""
+         SOCK_HOST="UNIX-LISTEN:${VPN_NAME}.sock"
+         SOCK_GUEST="UNIX-CLIENT:${VPN_NAME}.sock"
+         ;;
+    udp)
+         LPORT="--lport 51194 --float"
+         SOCK_HOST="UNIX-SENDTO:${VPN_NAME}.sock_in,bind=${VPN_NAME}.sock"
+         SOCK_GUEST="UNIX-SENDTO:${VPN_NAME}.sock,bind=${VPN_NAME}.sock_in"
+         ;;
+    *)   echo "Only tcp or udp VPNs are supported at this time." >&2
+         exit 1
+         ;;
+esac
 
 which socat >/dev/null \
     || (echo "Please: sudo apt-get install socat" && exit 1)
@@ -37,7 +51,7 @@ which $MULTIPLEXER >/dev/null \
 
 [ ! -e "${VPN_NAME}.sock" ] || (echo "VPN is already running" && exit 1)
 
-socat TCP:${VPN_SERVER}:${VPN_PORT:-"1194"} UNIX-LISTEN:${VPN_NAME}.sock &
+socat ${VPN_PROTO}:${VPN_SERVER}:${VPN_PORT:-"1194"} $SOCK_HOST &
 SOCAT_PID=$!
 sleep 2
 
@@ -51,7 +65,7 @@ ip addr add dev lo 127.0.0.1/32
 ip link set dev lo up
 
 # Bind the OpenVPN socket
-socat UNIX-CLIENT:${VPN_NAME}.sock TCP-LISTEN:${VPN_PORT:-"1194"} &
+socat $SOCK_GUEST ${VPN_PROTO}-LISTEN:${VPN_PORT:-"1194"} &
 sleep 2
 
 # Configure DNS
@@ -91,7 +105,7 @@ hostname $VPN_NAME
 # Start OpenVPN in $MULTIPLEXER
 cd $(dirname $VPN_CONFIG)
 $MULTIPLEXER -S ${PWD}/${VPN_NAME}.console new-session -n VPN -d \
-    "openvpn --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG; bash"
+    "openvpn $LPORT --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG; bash"
 cd $PWD
 
 # Ready
@@ -131,4 +145,4 @@ wait $NS_PID
 
 # Cleanup
 kill -9 $SOCAT_PID 2>/dev/null
-rm -f ${VPN_NAME}.sock
+rm -f ${VPN_NAME}.sock ${VPN_NAME}.sock_in
