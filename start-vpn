@@ -1,12 +1,16 @@
 #!/bin/sh -e
 # Configuration
 if [ -z "$1" ] || [ -z "$2" ]; then
-    echo "Usage: $0 <VPN name> <VPN config> [byobu|tmux]"
+    echo "Usage: $0 [--opts='openvpn args'] <VPN name> <VPN config> [byobu|tmux]"
+    echo " e.g.: $0  --opts='--pull dhcp-options --up /etc/openvpn/update-resolv-conf --script-security 2'  ..."
     exit 1
 fi
 
+OPENVPN_OPTS=
+case "$1" in
+    --opts=*) OPENVPN_OPTS=${1##*=};shift;;
+esac
 MULTIPLEXER=${3:-"byobu"}
-
 VPN_NAME=$1
 VPN_CONFIG=$2
 VPN_SERVER=$(set -- $(grep ^remote $VPN_CONFIG) && echo $2)
@@ -105,7 +109,7 @@ hostname $VPN_NAME
 # Start OpenVPN in $MULTIPLEXER
 cd $(dirname $VPN_CONFIG)
 $MULTIPLEXER -S ${PWD}/${VPN_NAME}.console new-session -n VPN -d \
-    "openvpn $LPORT --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG; bash"
+    "openvpn $LPORT --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG $OPENVPN_OPTS; bash"
 cd $PWD
 
 # Ready
