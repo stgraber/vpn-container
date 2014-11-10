@@ -31,7 +31,7 @@ case "$VPN_PROTO" in
          SOCK_GUEST="UNIX-CLIENT:${VPN_NAME}.sock"
          ;;
     udp)
-         LPORT="--lport 51194 --float"
+         LPORT="--nobind --float"
          SOCK_HOST="UNIX-SENDTO:${VPN_NAME}.sock_in,bind=${VPN_NAME}.sock"
          SOCK_GUEST="UNIX-SENDTO:${VPN_NAME}.sock,bind=${VPN_NAME}.sock_in"
          ;;
