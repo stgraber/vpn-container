@@ -8,7 +8,7 @@ fi
 
 OPENVPN_OPTS=
 case "$1" in
-    --opts=*) OPENVPN_OPTS=${1##*=};shift;;
+    --opts=*) OPENVPN_OPTS=${1#--opts=};shift;;
 esac
 MULTIPLEXER=${3:-"byobu"}
 VPN_NAME=$1
