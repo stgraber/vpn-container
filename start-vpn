@@ -85,7 +85,7 @@ echo "root:x:0:" > \$TEMPDIR/group
 echo "tty:x:0:" >> \$TEMPDIR/group
 mount --bind \$TEMPDIR/group /etc/group
 
-echo "root:x:0:0:root:$HOME:/bin/bash" > \$TEMPDIR/passwd
+echo "$USER:x:0:0:root:$HOME:/bin/bash" > \$TEMPDIR/passwd
 mount --bind \$TEMPDIR/passwd /etc/passwd
 
 # Setup MOTD
@@ -115,7 +115,7 @@ fi
 # Start OpenVPN in $MULTIPLEXER
 cd $(dirname $VPN_CONFIG)
 $MULTIPLEXER -S ${PWD}/${VPN_NAME}.console new-session -n VPN -d \
-    "openvpn --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG $LPORT --user root --group root \$OPENVPN_OPTS; bash"
+    "openvpn --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG $LPORT --user $USER --group root \$OPENVPN_OPTS; bash"
 cd $PWD
 
 # Ready
