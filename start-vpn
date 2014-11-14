@@ -85,6 +85,9 @@ echo "root:x:0:" > \$TEMPDIR/group
 echo "tty:x:0:" >> \$TEMPDIR/group
 mount --bind \$TEMPDIR/group /etc/group
 
+echo "root:x:0:0:root:$HOME:/bin/bash" > \$TEMPDIR/passwd
+mount --bind \$TEMPDIR/passwd /etc/passwd
+
 # Setup MOTD
 cat > \$TEMPDIR/motd << EMOTD
 Welcome to ${VPN_NAME}!
@@ -99,9 +102,6 @@ To terminate the VPN, simply close all tabs or call: $MULTIPLEXER kill-server
 EMOTD
 mount --bind \$TEMPDIR/motd /run/motd.dynamic
 export MOTD=/run/motd.dynamic
-
-# Setup the home directory
-mount --bind $HOME /root
 
 # Configure the hostname
 hostname $VPN_NAME
