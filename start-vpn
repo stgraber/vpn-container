@@ -109,7 +109,7 @@ hostname $VPN_NAME
 # Start OpenVPN in $MULTIPLEXER
 cd $(dirname $VPN_CONFIG)
 $MULTIPLEXER -S ${PWD}/${VPN_NAME}.console new-session -n VPN -d \
-    "openvpn $LPORT --user root --group root --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG $OPENVPN_OPTS; bash"
+    "openvpn --config $VPN_CONFIG $LPORT --user root --group root --remote 127.0.0.1 ${VPN_PORT:-"1194"} $OPENVPN_OPTS; bash"
 cd $PWD
 
 # Ready
