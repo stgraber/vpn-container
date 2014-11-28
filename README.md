@@ -18,6 +18,7 @@ attach inside the container.
  * socat
  * openvpn
  * byobu
+ * uidmap
  * lxc
  * A 3.13 or higher kernel with usernamespaces enabled
 

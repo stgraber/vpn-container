@@ -50,6 +50,8 @@ which lxc-usernsexec >/dev/null \
     || (echo "Please: sudo apt-get install lxc" && exit 1)
 which openvpn >/dev/null \
     || (echo "Please: sudo apt-get install openvpn" && exit 1)
+which newuidmap >/dev/null \
+    || (echo "Please: sudo apt-get install uidmap" && exit 1)
 which $MULTIPLEXER >/dev/null \
     || (echo "Please: sudo apt-get install $MULTIPLEXER" && exit 1)
 
