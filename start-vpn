@@ -75,7 +75,9 @@ socat $SOCK_GUEST ${VPN_PROTO}-LISTEN:${VPN_PORT:-"1194"} &
 sleep 2
 
 # Configure DNS
+mkdir -p /run/resolvconf/
 mount -t tmpfs tmpfs /run/resolvconf/
+[ -d /etc/resolvconf/resolv.conf.d/ ] && mount -t tmpfs tmpfs /etc/resolvconf/resolv.conf.d/
 mkdir /run/resolvconf/interface
 touch /run/resolvconf/enable-updates
 
