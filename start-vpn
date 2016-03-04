@@ -29,12 +29,12 @@ if [ -z "$VPN_SERVER" ]; then
 fi
 
 case "$VPN_PROTO" in
-    tcp)
+    tcp|tcp6)
          LPORT=""
          SOCK_HOST="UNIX-LISTEN:${VPN_NAME}.sock"
          SOCK_GUEST="UNIX-CLIENT:${VPN_NAME}.sock"
          ;;
-    udp)
+    udp|udp6)
          LPORT="--nobind --float"
          SOCK_HOST="UNIX-SENDTO:${VPN_NAME}.sock_in,bind=${VPN_NAME}.sock"
          SOCK_GUEST="UNIX-SENDTO:${VPN_NAME}.sock,bind=${VPN_NAME}.sock_in"
