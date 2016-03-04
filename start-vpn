@@ -7,9 +7,19 @@ if [ -z "$1" ] || [ -z "$2" ]; then
 fi
 
 OPENVPN_OPTS=
+OPENVPN_DEFAULT="false"
+
 case "$1" in
-    --opts=*) OPENVPN_OPTS=${1#--opts=};shift;;
+    --opts=*)
+        OPENVPN_OPTS=${1#--opts=}
+        shift
+    ;;
+    --default-gateway)
+        OPENVPN_DEFAULT="true"
+        shift
+    ;;
 esac
+
 MULTIPLEXER=${3:-"byobu"}
 VPN_NAME=$1
 VPN_CONFIG=$2
@@ -111,10 +121,20 @@ export MOTD=/run/motd.dynamic
 hostname $VPN_NAME
 
 # Setup DNS
+echo "#!/bin/sh" > \$TEMPDIR/vpn-up
+
 if [ -f /etc/openvpn/update-resolv-conf ]; then
-    OPENVPN_OPTS="--script-security 2 \$OPENVPN_OPTS"
-    OPENVPN_OPTS="--up /etc/openvpn/update-resolv-conf \$OPENVPN_OPTS"
+    echo "/etc/openvpn/update-resolv-conf \\\$@" >> \$TEMPDIR/vpn-up
 fi
+
+if [ "$OPENVPN_DEFAULT" = "true" ]; then
+    echo "ip -4 route add default dev \\\$1" >> \$TEMPDIR/vpn-up
+    echo "ip -6 route add default dev \\\$1" >> \$TEMPDIR/vpn-up
+fi
+
+echo "exit 0" >> \$TEMPDIR/vpn-up
+chmod +x \$TEMPDIR/vpn-up
+OPENVPN_OPTS="--script-security 2 --up \$TEMPDIR/vpn-up \$OPENVPN_OPTS"
 
 # Start OpenVPN in $MULTIPLEXER
 cd $(dirname $VPN_CONFIG)
