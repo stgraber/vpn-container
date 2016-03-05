@@ -57,15 +57,15 @@ which "${MULTIPLEXER}" >/dev/null \
 
 ### Config parsing
 # shellcheck disable=SC2046
-VPN_SERVER="$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${2}")"
+VPN_SERVER="$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${2:-}")"
 # shellcheck disable=SC2046
-VPN_PORT="$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${3}")"
+VPN_PORT="$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${3:-}")"
 # shellcheck disable=SC2046
-VPN_PROTO="$(set -- $(grep ^proto "${VPN_CONFIG}") && echo "${2}" | cut -d- -f1)"
+VPN_PROTO="$(set -- $(grep ^proto "${VPN_CONFIG}") && echo "${2:-}" | cut -d- -f1)"
 
 if [ -z "${VPN_PROTO}" ]; then
     # shellcheck disable=SC2046
-    VPN_PROTO=$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${4}")
+    VPN_PROTO=$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${4:-}")
 fi
 
 if [ -z "${VPN_PROTO}" ]; then
