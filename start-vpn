@@ -1,17 +1,19 @@
-#!/bin/sh -e
-# Configuration
+#!/bin/sh -eu
+
+### Usage
 if [ -z "$1" ] || [ -z "$2" ]; then
-    echo "Usage: $0 [--opts='openvpn args'] <VPN name> <VPN config> [byobu|tmux]"
-    echo " e.g.: $0  --opts='--pull dhcp-options --up /etc/openvpn/update-resolv-conf --script-security 2'  ..."
+    echo "Usage: ${0} [--opts='openvpn args'] <VPN name> <VPN config> [byobu|tmux]"
+    echo " e.g.: ${0}  --opts='--pull dhcp-options --up /etc/openvpn/update-resolv-conf --script-security 2'  ..."
     exit 1
 fi
 
+### Argument parsing
 OPENVPN_OPTS=
 OPENVPN_DEFAULT="false"
-
 case "$1" in
     --opts=*)
-        OPENVPN_OPTS=${1#--opts=}
+        # shellcheck disable=SC2034
+        OPENVPN_OPTS="${1#--opts=}"
         shift
     ;;
     --default-gateway)
@@ -20,20 +22,43 @@ case "$1" in
     ;;
 esac
 
+VPN_NAME=${1}
+VPN_CONFIG=${2}
 MULTIPLEXER=${3:-"byobu"}
-VPN_NAME=$1
-VPN_CONFIG=$2
-VPN_SERVER=$(set -- $(grep ^remote $VPN_CONFIG) && echo $2)
-VPN_PORT=$(set -- $(grep ^remote $VPN_CONFIG) && echo $3)
-VPN_PROTO=$(set -- $(grep ^proto $VPN_CONFIG) && echo $2 | cut -d- -f1)
-if [ -z "$VPN_PROTO" ]; then
-    VPN_PROTO=$(set -- $(grep ^remote $VPN_CONFIG) && echo $4)
+
+### Check if already running
+[ ! -e "${VPN_NAME}.sock" ] || (echo "VPN is already running" && exit 1)
+
+### Dependency check
+which socat >/dev/null \
+    || (echo "Please: sudo apt install socat" && exit 1)
+which lxc-usernsexec >/dev/null \
+    || (echo "Please: sudo apt install lxc" && exit 1)
+which openvpn >/dev/null \
+    || (echo "Please: sudo apt install openvpn" && exit 1)
+which newuidmap >/dev/null \
+    || (echo "Please: sudo apt install uidmap" && exit 1)
+which "${MULTIPLEXER}" >/dev/null \
+    || (echo "Please: sudo apt install ${MULTIPLEXER}" && exit 1)
+
+### Config parsing
+# shellcheck disable=SC2046
+VPN_SERVER="$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${2}")"
+# shellcheck disable=SC2046
+VPN_PORT="$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${3}")"
+# shellcheck disable=SC2046
+VPN_PROTO="$(set -- $(grep ^proto "${VPN_CONFIG}") && echo "${2}" | cut -d- -f1)"
+
+if [ -z "${VPN_PROTO}" ]; then
+    # shellcheck disable=SC2046
+    VPN_PROTO=$(set -- $(grep ^remote "${VPN_CONFIG}") && echo "${4}")
 fi
-if [ -z "$VPN_PROTO" ]; then
+
+if [ -z "${VPN_PROTO}" ]; then
     VPN_PROTO=udp
 fi
 
-if [ -z "$VPN_SERVER" ]; then
+if [ -z "${VPN_SERVER}" ]; then
     echo "Missing remote server in configuration." >&2
     exit 1
 fi
@@ -54,23 +79,11 @@ case "$VPN_PROTO" in
          ;;
 esac
 
-which socat >/dev/null \
-    || (echo "Please: sudo apt-get install socat" && exit 1)
-which lxc-usernsexec >/dev/null \
-    || (echo "Please: sudo apt-get install lxc" && exit 1)
-which openvpn >/dev/null \
-    || (echo "Please: sudo apt-get install openvpn" && exit 1)
-which newuidmap >/dev/null \
-    || (echo "Please: sudo apt-get install uidmap" && exit 1)
-which $MULTIPLEXER >/dev/null \
-    || (echo "Please: sudo apt-get install $MULTIPLEXER" && exit 1)
-
-[ ! -e "${VPN_NAME}.sock" ] || (echo "VPN is already running" && exit 1)
-
-socat ${VPN_PROTO}:${VPN_SERVER}:${VPN_PORT:-"1194"} $SOCK_HOST &
+### Setup the relay
+socat "${VPN_PROTO}:${VPN_SERVER}:${VPN_PORT:-"1194"}" "${SOCK_HOST}" &
 SOCAT_PID=$!
-sleep 2
 
+### Exec stage-2
 (
 cat << EOF
 # Setup proc
@@ -81,8 +94,8 @@ ip addr add dev lo 127.0.0.1/32
 ip link set dev lo up
 
 # Bind the OpenVPN socket
-socat $SOCK_GUEST ${VPN_PROTO}-LISTEN:${VPN_PORT:-"1194"} &
-sleep 2
+socat ${SOCK_GUEST} ${VPN_PROTO}-LISTEN:${VPN_PORT:-"1194"} &
+sleep 0.5
 
 # Configure DNS
 mkdir -p /run/resolvconf/
@@ -99,35 +112,35 @@ echo "root:x:0:" > \$TEMPDIR/group
 echo "tty:x:0:" >> \$TEMPDIR/group
 mount --bind \$TEMPDIR/group /etc/group
 
-echo "$USER:x:0:0:root:$HOME:/bin/bash" > \$TEMPDIR/passwd
+echo "${USER}:x:0:0:root:${HOME}:/bin/bash" > \$TEMPDIR/passwd
 mount --bind \$TEMPDIR/passwd /etc/passwd
 
 # Setup MOTD
 cat > \$TEMPDIR/motd << EMOTD
 Welcome to ${VPN_NAME}!
 
-This shell and any other $MULTIPLEXER tab you may open is running in a
+This shell and any other ${MULTIPLEXER} tab you may open is running in a
 minimal container. Even though you may appear to be root, you are not,
 uid 0 is actually mapped to your regular uid ($(id -u)).
 
 All network traffic from this container will be sent over the VPN.
-To terminate the VPN, simply close all tabs or call: $MULTIPLEXER kill-server
+To terminate the VPN, simply close all tabs or call: ${MULTIPLEXER} kill-server
 
 EMOTD
 mount --bind \$TEMPDIR/motd /run/motd.dynamic
 export MOTD=/run/motd.dynamic
 
 # Configure the hostname
-hostname $VPN_NAME
+hostname ${VPN_NAME}
 
-# Setup DNS
+# Configure OpenVPN
 echo "#!/bin/sh" > \$TEMPDIR/vpn-up
 
 if [ -f /etc/openvpn/update-resolv-conf ]; then
     echo "/etc/openvpn/update-resolv-conf \\\$@" >> \$TEMPDIR/vpn-up
 fi
 
-if [ "$OPENVPN_DEFAULT" = "true" ]; then
+if [ "${OPENVPN_DEFAULT}" = "true" ]; then
     echo "ip -4 route add default dev \\\$1" >> \$TEMPDIR/vpn-up
     echo "ip -6 route add default dev \\\$1" >> \$TEMPDIR/vpn-up
 fi
@@ -136,47 +149,46 @@ echo "exit 0" >> \$TEMPDIR/vpn-up
 chmod +x \$TEMPDIR/vpn-up
 OPENVPN_OPTS="--script-security 2 --up \$TEMPDIR/vpn-up \$OPENVPN_OPTS"
 
-# Start OpenVPN in $MULTIPLEXER
-cd $(dirname $VPN_CONFIG)
-$MULTIPLEXER -S ${PWD}/${VPN_NAME}.console new-session -n VPN -d \
-    "openvpn --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config $VPN_CONFIG $LPORT --user $USER --group root \$OPENVPN_OPTS; bash"
+# Start OpenVPN in ${MULTIPLEXER}
+cd "$(dirname "${VPN_CONFIG}")"
+${MULTIPLEXER} -S ${PWD}/${VPN_NAME}.console new-session -n VPN -d \
+    "openvpn --remote 127.0.0.1 ${VPN_PORT:-"1194"} --config ${VPN_CONFIG} ${LPORT} --user ${USER} --group root \$OPENVPN_OPTS; bash"
 cd $PWD
 
 # Ready
-while $MULTIPLEXER -S ${VPN_NAME}.console list-sessions >/dev/null 2>&1; do
-    sleep 2
+while ${MULTIPLEXER} -S ${VPN_NAME}.console list-sessions >/dev/null 2>&1; do
+    sleep 0.5
 done
 
 rm -f ${VPN_NAME}.console
 rm -Rf \$TEMPDIR
 EOF
-) | lxc-usernsexec -m u:0:$(id -u):1 -m g:0:$(id -g):1 -- \
+) | lxc-usernsexec -m "u:0:$(id -u):1" -m "g:0:$(id -g):1" -- \
     lxc-unshare -s "NETWORK|MOUNT|UTSNAME|PID" -- /bin/sh &
 NS_PID=$!
 
 # Wait for the namespace to get setup
-timeout=30
-while [ ! -e ${VPN_NAME}.console ] && [ "$timeout" -gt "0" ]; do
-    sleep 1
-    timeout=$(($timeout-1))
+timeout=60
+while [ ! -e "${VPN_NAME}.console" ] && [ "${timeout}" -gt "0" ]; do
+    sleep 0.5
+    timeout=$((timeout-1))
 done
 
-if [ "$timeout" = "0" ]; then
+if [ "${timeout}" = "0" ]; then
     echo "VPN failed to start" >&2
 else
     # Attach to session
-    sleep 1
-    while $MULTIPLEXER -S ${VPN_NAME}.console list-sessions >/dev/null 2>&1; do
-        $MULTIPLEXER -S ${VPN_NAME}.console new-window -t 1 -c $HOME \
+    while $MULTIPLEXER -S "${VPN_NAME}.console" list-sessions >/dev/null 2>&1; do
+        $MULTIPLEXER -S "${VPN_NAME}.console" new-window -t 1 -c "$HOME" \
             "cat /run/motd.dynamic ; bash"
             >/dev/null 2>&1 || true
-        $MULTIPLEXER -S ${VPN_NAME}.console attach
+        $MULTIPLEXER -S "${VPN_NAME}.console" attach
     done
 fi
 
 # Wait for things to finish
-wait $NS_PID
+wait ${NS_PID}
 
 # Cleanup
-kill -9 $SOCAT_PID 2>/dev/null
-rm -f ${VPN_NAME}.sock ${VPN_NAME}.sock_in
+kill -9 ${SOCAT_PID} 2>/dev/null
+rm -f "${VPN_NAME}.sock" "${VPN_NAME}.sock_in"
