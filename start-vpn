@@ -147,8 +147,12 @@ All network traffic from this container will be sent over the VPN.
 To terminate the VPN, simply close all tabs or call: ${MULTIPLEXER} kill-server
 
 EMOTD
-mount --bind \$TEMPDIR/motd /run/motd.dynamic
-export MOTD=/run/motd.dynamic
+if [ -e "/run/motd.dynamic" ]; then
+    mount --bind \$TEMPDIR/motd /run/motd.dynamic
+    export MOTD=/run/motd.dynamic
+else
+    export MOTD=\$TEMPDIR/motd
+fi
 
 # Configure the hostname
 hostname ${VPN_NAME}
@@ -198,7 +202,7 @@ else
     # Attach to session
     while $MULTIPLEXER -S "${WORKDIR}/${VPN_NAME}.console" list-sessions >/dev/null 2>&1; do
         $MULTIPLEXER -S "${WORKDIR}/${VPN_NAME}.console" new-window -t 1 -c "$HOME" \
-            "cat /run/motd.dynamic ; bash"
+            "cat \${MOTD} ; bash"
             >/dev/null 2>&1 || true
         $MULTIPLEXER -S "${WORKDIR}/${VPN_NAME}.console" attach
     done
