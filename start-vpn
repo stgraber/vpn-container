@@ -46,12 +46,10 @@ trap cleanup EXIT HUP INT TERM
 ### Dependency check
 which socat >/dev/null \
     || (echo "Please: sudo apt install socat" && exit 1)
-which lxc-usernsexec >/dev/null \
-    || (echo "Please: sudo apt install lxc" && exit 1)
+which unshare >/dev/null \
+    || (echo "Please: sudo apt install sharutils" && exit 1)
 which openvpn >/dev/null \
     || (echo "Please: sudo apt install openvpn" && exit 1)
-which newuidmap >/dev/null \
-    || (echo "Please: sudo apt install uidmap" && exit 1)
 which "${MULTIPLEXER}" >/dev/null \
     || (echo "Please: sudo apt install ${MULTIPLEXER}" && exit 1)
 
@@ -184,8 +182,7 @@ while ${MULTIPLEXER} -S ${WORKDIR}/${VPN_NAME}.console list-sessions >/dev/null 
     sleep 0.5
 done
 EOF
-) | lxc-usernsexec -m "u:0:$(id -u):1" -m "g:0:$(id -g):1" -- \
-    lxc-unshare -s "NETWORK|MOUNT|UTSNAME|PID" -- /bin/sh &
+) | unshare -U -r -n -m -u -p -f -- /bin/sh &
 NS_PID=$!
 
 # Wait for the namespace to get setup
