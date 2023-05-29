@@ -47,7 +47,7 @@ trap cleanup EXIT HUP INT TERM
 which socat >/dev/null \
     || (echo "Please: sudo apt install socat" && exit 1)
 which unshare >/dev/null \
-    || (echo "Please: sudo apt install sharutils" && exit 1)
+    || (echo "Please: sudo apt install util-linux" && exit 1)
 which openvpn >/dev/null \
     || (echo "Please: sudo apt install openvpn" && exit 1)
 which "${MULTIPLEXER}" >/dev/null \
